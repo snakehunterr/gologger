@@ -190,14 +190,6 @@ func (l *SentryLogger) Warn() *zerolog.Event {
 	return l.logger.Warn()
 }
 
-func (l *SentryLogger) Err(err error) *zerolog.Event {
-	return l.logger.Err(err)
-}
-
-func (l *SentryLogger) Errf(format string, args ...any) *zerolog.Event {
-	return l.Err(fmt.Errorf(format, args...))
-}
-
 func (l *SentryLogger) Error() *zerolog.Event {
 	return l.logger.Error()
 }

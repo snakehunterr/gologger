@@ -63,14 +63,6 @@ func (l *ConsoleLogger) Warn() *zerolog.Event {
 	return l.logger.Warn()
 }
 
-func (l *ConsoleLogger) Err(err error) *zerolog.Event {
-	return l.logger.Err(err)
-}
-
-func (l *ConsoleLogger) Errf(format string, args ...any) *zerolog.Event {
-	return l.Err(fmt.Errorf(format, args...))
-}
-
 func (l *ConsoleLogger) Error() *zerolog.Event {
 	return l.logger.Error()
 }

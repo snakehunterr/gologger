@@ -155,16 +155,6 @@ func (l *FileLogger) Warn() *zerolog.Event {
 	})
 }
 
-func (l *FileLogger) Err(err error) *zerolog.Event {
-	return l.callToZeroLogger(func() *zerolog.Event {
-		return l.logger.Err(err)
-	})
-}
-
-func (l *FileLogger) Errf(format string, args ...any) *zerolog.Event {
-	return l.Err(fmt.Errorf(format, args...))
-}
-
 func (l *FileLogger) Error() *zerolog.Event {
 	return l.callToZeroLogger(func() *zerolog.Event {
 		return l.logger.Error()
