@@ -1,70 +1,13 @@
 package logger
 
 import (
-	"errors"
 	"fmt"
 	"io"
-	"reflect"
 
 	"github.com/snakehunterr/gologger/loggers"
 
 	"github.com/rs/zerolog"
 )
-
-type LoggerEvents []*zerolog.Event
-
-func (le LoggerEvents) Msg(msg string) {
-	for _, event := range le {
-		event.Msg(msg)
-	}
-}
-
-func (le LoggerEvents) Msgf(format string, args ...any) {
-	le.Msg(fmt.Sprintf(format, args...))
-}
-
-func (le LoggerEvents) Str(key, val string) LoggerEvents {
-	for _, event := range le {
-		if event == nil {
-			continue
-		}
-		*event = *event.Str(key, val)
-	}
-
-	return le
-}
-
-func (le LoggerEvents) Err(err error) LoggerEvents {
-	inner := err
-
-	for {
-		unwrapped := errors.Unwrap(inner)
-
-		if unwrapped == nil {
-			break
-		}
-
-		inner = unwrapped
-	}
-
-	rftype := reflect.TypeOf(inner)
-
-	var errorType string
-	if rftype.Kind() == reflect.Ptr {
-		errorType = rftype.Elem().Name()
-	} else {
-		errorType = rftype.Name()
-	}
-
-	for _, event := range le {
-		if event == nil {
-			continue
-		}
-		*event = *event.Err(err).Str("error_type", errorType)
-	}
-
-	return le
-}
 
 type LoggerService struct {
 	consoleLogger *loggers.ConsoleLogger
@@ -76,8 +19,6 @@ type LoggerService struct {
 func NewLoggerService() *LoggerService {
 	return &LoggerService{}
 }
-
-type ConsoleLoggerConfig = loggers.ConsoleLoggerConfig
 
 func (ls *LoggerService) WithConsoleLogger(config *ConsoleLoggerConfig) error {
 	if ls.consoleLogger != nil {
@@ -94,8 +35,6 @@ func (ls *LoggerService) WithConsoleLogger(config *ConsoleLoggerConfig) error {
 	return nil
 }
 
-type FileLoggerConfig = loggers.FileLoggerConfig
-
 func (ls *LoggerService) WithFileLogger(config *FileLoggerConfig) error {
 	if ls.fileLogger != nil {
 		return nil
@@ -111,10 +50,8 @@ func (ls *LoggerService) WithFileLogger(config *FileLoggerConfig) error {
 	return nil
 }
 
-type SentryLoggerConfig = loggers.SentryLoggerConfig
-
 func (ls *LoggerService) WithSentryLogger(config *SentryLoggerConfig) error {
-	if ls.fileLogger != nil {
+	if ls.sentryLogger != nil {
 		return nil
 	}
 
