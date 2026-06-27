@@ -1,6 +1,6 @@
-package logger
+package gologger
 
-import "github.com/snakehunterr/gologger/logger/loggers"
+import "github.com/snakehunterr/gologger/loggers"
 
 type ConsoleLoggerConfig = loggers.ConsoleLoggerConfig
 

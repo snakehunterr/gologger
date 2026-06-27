@@ -1,10 +1,10 @@
-package logger
+package gologger
 
 import (
 	"fmt"
 	"io"
 
-	"github.com/snakehunterr/gologger/logger/loggers"
+	"github.com/snakehunterr/gologger/loggers"
 
 	"github.com/rs/zerolog"
 )

@@ -1,4 +1,4 @@
-module github.com/snakehunterr/gologger/logger
+module github.com/snakehunterr/gologger
 
 go 1.26.4
 
