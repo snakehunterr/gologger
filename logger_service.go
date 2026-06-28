@@ -10,10 +10,11 @@ import (
 )
 
 type LoggerService struct {
-	consoleLogger *loggers.ConsoleLogger
-	fileLogger    *loggers.FileLogger
-	sentryLogger  *loggers.SentryLogger
-	loggers       []Logger
+	consoleLogger     *loggers.ConsoleLogger
+	fileLogger        *loggers.FileLogger
+	sentryLogger      *loggers.SentryLogger
+	openObserveLogger *loggers.OpenObserveLogger
+	loggers           []Logger
 }
 
 func NewLoggerService() *LoggerService {
@@ -61,6 +62,21 @@ func (ls *LoggerService) WithSentryLogger(config *SentryLoggerConfig) error {
 	}
 
 	ls.loggers = append(ls.loggers, ls.sentryLogger)
+
+	return nil
+}
+
+func (ls *LoggerService) WithOpenObserveLogger(config *OpenObserveLoggerConfig) error {
+	if ls.openObserveLogger != nil {
+		return nil
+	}
+
+	var err error
+	if ls.openObserveLogger, err = loggers.NewOpenObserveLogger(config); err != nil {
+		return fmt.Errorf("loggers.NewOpenObserveLogger: %w", err)
+	}
+
+	ls.loggers = append(ls.loggers, ls.openObserveLogger)
 
 	return nil
 }

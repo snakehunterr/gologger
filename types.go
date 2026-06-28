@@ -7,3 +7,5 @@ type ConsoleLoggerConfig = loggers.ConsoleLoggerConfig
 type FileLoggerConfig = loggers.FileLoggerConfig
 
 type SentryLoggerConfig = loggers.SentryLoggerConfig
+
+type OpenObserveLoggerConfig = loggers.OpenObserveLoggerConfig
