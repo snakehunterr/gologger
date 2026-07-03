@@ -38,6 +38,7 @@ type FileLogger struct {
 	logger   zerolog.Logger
 	currDate time.Time
 	mu       sync.Mutex
+	closed   bool
 }
 
 func NewFileLogger(config *FileLoggerConfig) (*FileLogger, error) {
@@ -162,6 +163,9 @@ func (l *FileLogger) Error() *zerolog.Event {
 }
 
 func (l *FileLogger) Close() error {
+	if l.closed {
+		return nil
+	}
 	if l.file == nil {
 		return nil
 	}
@@ -169,5 +173,6 @@ func (l *FileLogger) Close() error {
 	err := l.file.Close()
 	l.file = nil
 
+	l.closed = true
 	return err
 }

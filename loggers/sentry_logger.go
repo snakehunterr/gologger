@@ -38,30 +38,6 @@ func (c *SentryLoggerConfig) Validate() error {
 	return nil
 }
 
-type SentryLoggerMessage struct {
-	Service   string `json:"service"`
-	Module    string `json:"module"`
-	Message   string `json:"message"`
-	Level     string `json:"level"`
-	Error     string `json:"error"`
-	ErrorType string `json:"error_type"`
-}
-
-func (m *SentryLoggerMessage) ToSentryContext() sentry.Context {
-	ctx := sentry.Context{}
-
-	if m == nil {
-		return ctx
-	}
-
-	ctx["service"] = m.Service
-	ctx["module"] = m.Module
-	ctx["message"] = m.Message
-	ctx["level"] = m.Level
-
-	return ctx
-}
-
 type SentryWriter struct {
 	levelMap map[string]sentry.Level
 }
@@ -82,7 +58,7 @@ func NewSentryWriter() *SentryWriter {
 }
 
 func (w *SentryWriter) Write(p []byte) (int, error) {
-	var msg SentryLoggerMessage
+	var msg LoggerMessage
 	if err := json.Unmarshal(p, &msg); err != nil {
 		return 0, fmt.Errorf("json.Unmarshal: %w", err)
 	}
@@ -114,7 +90,7 @@ func (w *SentryWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (w *SentryWriter) captureEvent(msg *SentryLoggerMessage) error {
+func (w *SentryWriter) captureEvent(msg *LoggerMessage) error {
 	event := sentry.NewEvent()
 
 	event.Message = msg.Message
@@ -124,7 +100,7 @@ func (w *SentryWriter) captureEvent(msg *SentryLoggerMessage) error {
 	return nil
 }
 
-func (w *SentryWriter) captureError(msg *SentryLoggerMessage) error {
+func (w *SentryWriter) captureError(msg *LoggerMessage) error {
 	event := sentry.NewEvent()
 
 	event.Message = msg.Message
@@ -146,6 +122,7 @@ type SentryLogger struct {
 	config *SentryLoggerConfig
 	writer *SentryWriter
 	logger zerolog.Logger
+	closed bool
 }
 
 func NewSentryLogger(config *SentryLoggerConfig) (*SentryLogger, error) {
@@ -195,8 +172,14 @@ func (l *SentryLogger) Error() *zerolog.Event {
 }
 
 func (l *SentryLogger) Close() error {
+	if l.closed {
+		return nil
+	}
+
 	if !sentry.Flush(5 * time.Second) {
 		return fmt.Errorf("sentry.Flush returned false")
 	}
+
+	l.closed = true
 	return nil
 }

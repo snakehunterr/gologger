@@ -7,27 +7,25 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	otellog "go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/metric"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/rs/zerolog"
 )
 
-// ── Config ─────────────────────────────────────────────────────────────────
-
 type OpenObserveLoggerConfig struct {
-	// Level is the minimum log level to send (trace/debug/info/warn/error).
-	Level string `json:"level"`
-	level zerolog.Level
-
-	// CollectorEndpoint is the OTel Collector address, e.g. "localhost:4318".
-	// Logs are sent to http://<CollectorEndpoint>/v1/logs.
-	// The collector is responsible for forwarding to OpenObserve with the
-	// correct stream-name header.
+	Level             string `json:"level"`
+	level             zerolog.Level
 	CollectorEndpoint string `json:"collector_endpoint"`
-
-	// ServiceName is attached to every log record as a resource attribute.
-	ServiceName string `json:"service_name"`
+	ServiceName       string `json:"service_name"`
 }
 
 func (c *OpenObserveLoggerConfig) Validate() error {
@@ -47,10 +45,6 @@ func (c *OpenObserveLoggerConfig) Validate() error {
 	return nil
 }
 
-// ── Writer ─────────────────────────────────────────────────────────────────
-
-// openObserveWriter implements io.Writer.
-// zerolog writes a JSON line; we parse it and emit an otellog.Record.
 type openObserveWriter struct {
 	otelLogger otellog.Logger
 
@@ -74,66 +68,45 @@ func newOpenObserveWriter(otelLogger otellog.Logger) *openObserveWriter {
 
 func (w *openObserveWriter) Write(p []byte) (int, error) {
 	// Parse the JSON line zerolog produced
-	var fields map[string]any
-	if err := json.Unmarshal(p, &fields); err != nil {
+	var msg LoggerMessage
+	if err := json.Unmarshal(p, &msg); err != nil {
 		return 0, fmt.Errorf("json.Unmarshal: %w", err)
 	}
 
 	var r otellog.Record
 
-	// Timestamp
-	if ts, ok := fields[zerolog.TimestampFieldName].(string); ok {
-		if t, err := time.Parse(time.RFC3339, ts); err == nil {
-			r.SetTimestamp(t)
-		}
-	} else {
-		r.SetTimestamp(time.Now())
+	r.SetTimestamp(msg.Time)
+
+	if sev, ok := w.severityMap[msg.Level]; ok {
+		r.SetSeverity(sev)
+		r.SetSeverityText(msg.Level)
 	}
 
-	// Severity from zerolog level field
-	if lvl, ok := fields[zerolog.LevelFieldName].(string); ok {
-		if sev, ok := w.severityMap[lvl]; ok {
-			r.SetSeverity(sev)
-			r.SetSeverityText(lvl)
-		}
-	}
-
-	// Body from zerolog message field
-	if msg, ok := fields[zerolog.MessageFieldName].(string); ok {
-		r.SetBody(otellog.StringValue(msg))
-	}
+	r.SetBody(otellog.StringValue(msg.Message))
 
 	// All other fields become OTel log attributes
-	attrs := make([]otellog.KeyValue, 0, len(fields))
-	for k, v := range fields {
-		if k == zerolog.TimestampFieldName ||
-			k == zerolog.LevelFieldName ||
-			k == zerolog.MessageFieldName {
-			continue
-		}
-		switch val := v.(type) {
-		case string:
-			attrs = append(attrs, otellog.String(k, val))
-		case float64:
-			attrs = append(attrs, otellog.Float64(k, val))
-		case bool:
-			attrs = append(attrs, otellog.Bool(k, val))
-		default:
-			attrs = append(attrs, otellog.String(k, fmt.Sprintf("%v", val)))
-		}
-	}
-	r.AddAttributes(attrs...)
+	r.AddAttributes(
+		msg.ToOTELAttrubutes()...,
+	)
 
 	w.otelLogger.Emit(context.Background(), r)
 	return len(p), nil
 }
 
-// ── Logger ─────────────────────────────────────────────────────────────────
-
 type OpenObserveLogger struct {
-	config         *OpenObserveLoggerConfig
+	config *OpenObserveLoggerConfig
+
+	resource *resource.Resource
+
 	loggerProvider *sdklog.LoggerProvider
-	logger         zerolog.Logger
+	tracerProvider *sdktrace.TracerProvider
+	meterProvider  *sdkmetric.MeterProvider
+
+	logger zerolog.Logger
+	tracer trace.Tracer
+	meter  metric.Meter
+
+	closed bool
 }
 
 func NewOpenObserveLogger(config *OpenObserveLoggerConfig) (*OpenObserveLogger, error) {
@@ -143,34 +116,117 @@ func NewOpenObserveLogger(config *OpenObserveLoggerConfig) (*OpenObserveLogger, 
 
 	ctx := context.Background()
 
+	res, err := resource.New(ctx,
+		resource.WithAttributes(
+			semconv.ServiceName(config.ServiceName),
+		),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("resource.New: %w", err)
+	}
+
+	l := &OpenObserveLogger{
+		config:   config,
+		resource: res,
+	}
+
+	if err := l.setupLogs(ctx); err != nil {
+		return nil, fmt.Errorf("setupLogs: %w", err)
+	}
+
+	if err := l.setupTraces(ctx); err != nil {
+		return nil, fmt.Errorf("setupTraces: %w", err)
+	}
+
+	if err := l.setupMetrics(ctx); err != nil {
+		return nil, fmt.Errorf("setupMetrics: %w", err)
+	}
+
+	return l, nil
+}
+
+func (l *OpenObserveLogger) setupLogs(ctx context.Context) error {
 	// OTLP HTTP log exporter → OTel Collector
 	exporter, err := otlploghttp.New(ctx,
-		otlploghttp.WithEndpoint(config.CollectorEndpoint),
+		otlploghttp.WithEndpoint(l.config.CollectorEndpoint),
 		otlploghttp.WithURLPath("/v1/logs"),
 		otlploghttp.WithInsecure(),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("otlploghttp.New: %w", err)
+		return fmt.Errorf("otlploghttp.New: %w", err)
 	}
 
-	loggerProvider := sdklog.NewLoggerProvider(
+	l.loggerProvider = sdklog.NewLoggerProvider(
 		sdklog.WithProcessor(sdklog.NewBatchProcessor(exporter)),
+		sdklog.WithResource(l.resource),
 	)
 
-	otelLogger := loggerProvider.Logger(config.ServiceName)
-
-	l := &OpenObserveLogger{
-		config:         config,
-		loggerProvider: loggerProvider,
-	}
+	otelLogger := l.loggerProvider.Logger(l.config.ServiceName)
 
 	l.logger = zerolog.New(newOpenObserveWriter(otelLogger)).
-		Level(config.level).
+		Level(l.config.level).
 		With().
 		Timestamp().
 		Logger()
 
-	return l, nil
+	return nil
+}
+
+func (l *OpenObserveLogger) setupTraces(ctx context.Context) error {
+	// OTLP HTTP trace exporter → OTel Collector
+	exporter, err := otlptracehttp.New(ctx,
+		otlptracehttp.WithEndpoint(l.config.CollectorEndpoint),
+		otlptracehttp.WithURLPath("/v1/traces"),
+		otlptracehttp.WithInsecure(),
+	)
+	if err != nil {
+		return fmt.Errorf("otlptracehttp.New: %w", err)
+	}
+
+	l.tracerProvider = sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithResource(l.resource),
+	)
+
+	l.tracer = l.tracerProvider.Tracer(l.config.ServiceName)
+
+	return nil
+}
+
+func (l *OpenObserveLogger) setupMetrics(ctx context.Context) error {
+	// OTLP HTTP metric exporter → OTel Collector
+	exporter, err := otlpmetrichttp.New(ctx,
+		otlpmetrichttp.WithEndpoint(l.config.CollectorEndpoint),
+		otlpmetrichttp.WithURLPath("/v1/metrics"),
+		otlpmetrichttp.WithInsecure(),
+	)
+	if err != nil {
+		return fmt.Errorf("otlpmetrichttp.New: %w", err)
+	}
+
+	l.meterProvider = sdkmetric.NewMeterProvider(
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exporter)),
+		sdkmetric.WithResource(l.resource),
+	)
+
+	l.meter = l.meterProvider.Meter(l.config.ServiceName)
+
+	return nil
+}
+
+// Tracer returns the OTel tracer, for starting spans:
+//
+//	ctx, span := logger.Tracer().Start(ctx, "operation-name")
+//	defer span.End()
+func (l *OpenObserveLogger) Tracer() trace.Tracer {
+	return l.tracer
+}
+
+// Meter returns the OTel meter, for creating instruments:
+//
+//	counter, err := logger.Meter().Int64Counter("requests_total")
+func (l *OpenObserveLogger) Meter() metric.Meter {
+	return l.meter
 }
 
 func (l *OpenObserveLogger) Trace() *zerolog.Event { return l.logger.Trace() }
@@ -181,10 +237,25 @@ func (l *OpenObserveLogger) Error() *zerolog.Event { return l.logger.Error() }
 
 // Close flushes all pending log records to the collector.
 func (l *OpenObserveLogger) Close() error {
+	if l.closed {
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
 	if err := l.loggerProvider.Shutdown(ctx); err != nil {
 		return fmt.Errorf("loggerProvider.Shutdown: %w", err)
 	}
+
+	if err := l.tracerProvider.Shutdown(ctx); err != nil {
+		return fmt.Errorf("tracerProvider.Shutdown: %w", err)
+	}
+
+	if err := l.meterProvider.Shutdown(ctx); err != nil {
+		return fmt.Errorf("meterProvider.Shutdown: %w", err)
+	}
+
+	l.closed = true
 	return nil
 }
