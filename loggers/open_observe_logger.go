@@ -25,7 +25,6 @@ type OpenObserveLoggerConfig struct {
 	Level             string `json:"level"`
 	level             zerolog.Level
 	CollectorEndpoint string `json:"collector_endpoint"`
-	ServiceName       string `json:"service_name"`
 }
 
 func (c *OpenObserveLoggerConfig) Validate() error {
@@ -38,9 +37,6 @@ func (c *OpenObserveLoggerConfig) Validate() error {
 	}
 	if c.CollectorEndpoint == "" {
 		return ConfigValidateError("c.CollectorEndpoint is empty")
-	}
-	if c.ServiceName == "" {
-		return ConfigValidateError("c.ServiceName is empty")
 	}
 	return nil
 }
@@ -94,6 +90,8 @@ func (w *openObserveWriter) Write(p []byte) (int, error) {
 }
 
 type OpenObserveLogger struct {
+	serviceName string
+
 	config *OpenObserveLoggerConfig
 
 	resource *resource.Resource
@@ -109,7 +107,7 @@ type OpenObserveLogger struct {
 	closed bool
 }
 
-func NewOpenObserveLogger(config *OpenObserveLoggerConfig) (*OpenObserveLogger, error) {
+func NewOpenObserveLogger(serviceName string, config *OpenObserveLoggerConfig) (*OpenObserveLogger, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("config.Validate: %w", err)
 	}
@@ -118,7 +116,7 @@ func NewOpenObserveLogger(config *OpenObserveLoggerConfig) (*OpenObserveLogger, 
 
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
-			semconv.ServiceName(config.ServiceName),
+			semconv.ServiceName(serviceName),
 		),
 	)
 	if err != nil {
@@ -126,8 +124,9 @@ func NewOpenObserveLogger(config *OpenObserveLoggerConfig) (*OpenObserveLogger, 
 	}
 
 	l := &OpenObserveLogger{
-		config:   config,
-		resource: res,
+		serviceName: serviceName,
+		config:      config,
+		resource:    res,
 	}
 
 	if err := l.setupLogs(ctx); err != nil {
@@ -161,7 +160,7 @@ func (l *OpenObserveLogger) setupLogs(ctx context.Context) error {
 		sdklog.WithResource(l.resource),
 	)
 
-	otelLogger := l.loggerProvider.Logger(l.config.ServiceName)
+	otelLogger := l.loggerProvider.Logger(l.serviceName)
 
 	l.logger = zerolog.New(newOpenObserveWriter(otelLogger)).
 		Level(l.config.level).
@@ -188,7 +187,7 @@ func (l *OpenObserveLogger) setupTraces(ctx context.Context) error {
 		sdktrace.WithResource(l.resource),
 	)
 
-	l.tracer = l.tracerProvider.Tracer(l.config.ServiceName)
+	l.tracer = l.tracerProvider.Tracer(l.serviceName)
 
 	return nil
 }
@@ -209,7 +208,7 @@ func (l *OpenObserveLogger) setupMetrics(ctx context.Context) error {
 		sdkmetric.WithResource(l.resource),
 	)
 
-	l.meter = l.meterProvider.Meter(l.config.ServiceName)
+	l.meter = l.meterProvider.Meter(l.serviceName)
 
 	return nil
 }

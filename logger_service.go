@@ -164,7 +164,7 @@ func (ls *LoggerService) WithOpenObserveLogger(config *OpenObserveLoggerConfig) 
 	}
 
 	var err error
-	if ls.openObserveLogger, err = loggers.NewOpenObserveLogger(config); err != nil {
+	if ls.openObserveLogger, err = loggers.NewOpenObserveLogger(ls.serviceName, config); err != nil {
 		return fmt.Errorf("loggers.NewOpenObserveLogger: %w", err)
 	}
 
