@@ -171,6 +171,10 @@ func (l *SentryLogger) Error() *zerolog.Event {
 	return l.logger.Error()
 }
 
+func (l *SentryLogger) GetLevel() zerolog.Level {
+	return l.logger.GetLevel()
+}
+
 func (l *SentryLogger) Close() error {
 	if l.closed {
 		return nil

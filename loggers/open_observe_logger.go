@@ -235,6 +235,10 @@ func (l *OpenObserveLogger) Info() *zerolog.Event  { return l.logger.Info() }
 func (l *OpenObserveLogger) Warn() *zerolog.Event  { return l.logger.Warn() }
 func (l *OpenObserveLogger) Error() *zerolog.Event { return l.logger.Error() }
 
+func (l *OpenObserveLogger) GetLevel() zerolog.Level {
+	return l.logger.GetLevel()
+}
+
 // Close flushes all pending log records to the collector.
 func (l *OpenObserveLogger) Close() error {
 	if l.closed {

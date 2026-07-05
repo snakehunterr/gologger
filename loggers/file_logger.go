@@ -162,6 +162,10 @@ func (l *FileLogger) Error() *zerolog.Event {
 	})
 }
 
+func (l *FileLogger) GetLevel() zerolog.Level {
+	return l.logger.GetLevel()
+}
+
 func (l *FileLogger) Close() error {
 	if l.closed {
 		return nil

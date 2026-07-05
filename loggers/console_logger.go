@@ -67,6 +67,10 @@ func (l *ConsoleLogger) Error() *zerolog.Event {
 	return l.logger.Error()
 }
 
+func (l *ConsoleLogger) GetLevel() zerolog.Level {
+	return l.logger.GetLevel()
+}
+
 func (l *ConsoleLogger) Close() error {
 	return nil
 }

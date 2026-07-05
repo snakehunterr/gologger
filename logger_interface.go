@@ -8,5 +8,6 @@ type Logger interface {
 	Info() *zerolog.Event
 	Warn() *zerolog.Event
 	Error() *zerolog.Event
+	GetLevel() zerolog.Level
 	Close() error
 }
