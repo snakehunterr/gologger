@@ -7,6 +7,7 @@ import (
 	"github.com/snakehunterr/gologger/loggers"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/rs/zerolog"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
@@ -207,6 +208,34 @@ func (ls *LoggerService) Warn() LoggerEvents {
 
 func (ls *LoggerService) Error() LoggerEvents {
 	return ls.callToLoggers(func(logger Logger) *zerolog.Event { return logger.Error() })
+}
+
+func (ls *LoggerService) GetMinZerologLevel() zerolog.Level {
+	level := zerolog.Disabled
+
+	for _, logger := range ls.loggers {
+		lvl := logger.GetLevel()
+		if level > lvl {
+			level = lvl
+		}
+	}
+
+	return level
+}
+
+func (ls *LoggerService) GetMinZapLevel() zapcore.Level {
+	switch ls.GetMinZerologLevel() {
+	case zerolog.TraceLevel, zerolog.DebugLevel:
+		return zapcore.DebugLevel
+	case zerolog.InfoLevel:
+		return zapcore.InfoLevel
+	case zerolog.WarnLevel:
+		return zapcore.WarnLevel
+	case zerolog.ErrorLevel:
+		return zapcore.ErrorLevel
+	default:
+		return zapcore.ErrorLevel
+	}
 }
 
 func (ls *LoggerService) Close() error {
