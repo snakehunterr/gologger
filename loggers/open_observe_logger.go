@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/rs/zerolog"
+	"github.com/snakehunterr/gologger/types"
 )
 
 type OpenObserveLoggerConfig struct {
@@ -64,7 +65,7 @@ func newOpenObserveWriter(otelLogger otellog.Logger) *openObserveWriter {
 
 func (w *openObserveWriter) Write(p []byte) (int, error) {
 	// Parse the JSON line zerolog produced
-	var msg LoggerMessage
+	var msg types.LoggerMessage
 	if err := json.Unmarshal(p, &msg); err != nil {
 		return 0, fmt.Errorf("json.Unmarshal: %w", err)
 	}
@@ -81,11 +82,19 @@ func (w *openObserveWriter) Write(p []byte) (int, error) {
 	r.SetBody(otellog.StringValue(msg.Message))
 
 	// All other fields become OTel log attributes
-	r.AddAttributes(
-		msg.ToOTELAttrubutes()...,
-	)
+	r.AddAttributes(msg.ToOTELAttributes()...)
+	r.AddAttributes(msg.UserContext.ToOTELAttributes()...)
+	r.AddAttributes(msg.FiberCtx.ToOTELAttributes()...)
 
-	w.otelLogger.Emit(context.Background(), r)
+	ctx := context.Background()
+	if cfg, ok := msg.TraceContext.ToSpanContextConfig(); ok {
+		ctx = trace.ContextWithSpanContext(
+			ctx,
+			trace.NewSpanContext(*cfg),
+		)
+	}
+
+	w.otelLogger.Emit(ctx, r)
 	return len(p), nil
 }
 

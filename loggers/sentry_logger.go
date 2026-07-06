@@ -7,6 +7,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
+	"github.com/snakehunterr/gologger/types"
 )
 
 type SentryLoggerConfig struct {
@@ -58,28 +59,43 @@ func NewSentryWriter() *SentryWriter {
 }
 
 func (w *SentryWriter) Write(p []byte) (int, error) {
-	var msg LoggerMessage
+	var msg types.LoggerMessage
 	if err := json.Unmarshal(p, &msg); err != nil {
 		return 0, fmt.Errorf("json.Unmarshal: %w", err)
 	}
 
 	var err error
 	sentry.WithScope(func(scope *sentry.Scope) {
-		scope.SetTag("module", msg.Module)
-		scope.SetTag("service", msg.Service)
-		scope.SetTag("level", msg.Level)
-		scope.SetTag("logger", "sentry-logger")
-
-		scope.SetContext("event_context", msg.ToSentryContext())
-
-		if msg.Level == zerolog.LevelErrorValue {
-			if e := w.captureError(&msg); e != nil {
-				err = fmt.Errorf("captureError: %w", e)
+		if tags, ok := msg.ToSentryTags(); ok {
+			for k, v := range tags {
+				scope.SetTag(k, v)
 			}
-		} else {
-			if e := w.captureEvent(&msg); e != nil {
-				err = fmt.Errorf("captureEvent: %w", e)
+		}
+
+		if tags, ok := msg.FiberCtx.ToSentryTags(); ok {
+			for k, v := range tags {
+				scope.SetTag(k, v)
 			}
+		}
+
+		if ctx, ok := msg.FiberCtx.ToSentryRequestInfoContext(); ok {
+			scope.SetContext("Request Info", ctx)
+		}
+
+		if ctx, ok := msg.FiberCtx.ToSentryProxyInfoContext(); ok {
+			scope.SetContext("Proxy Info", ctx)
+		}
+
+		if ctx, ok := msg.TraceContext.ToSentryPropagationContext(); ok && ctx != nil {
+			scope.SetPropagationContext(*ctx)
+		}
+
+		if user, ok := msg.UserContext.ToSentryUser(); ok {
+			scope.SetUser(*user)
+		}
+
+		if err = w.captureEvent(&msg); err != nil {
+			err = fmt.Errorf("w.captureEvent: %w", err)
 		}
 	})
 
@@ -90,7 +106,13 @@ func (w *SentryWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (w *SentryWriter) captureEvent(msg *LoggerMessage) error {
+func (w *SentryWriter) captureEvent(msg *types.LoggerMessage) error {
+	if msg.Level == zerolog.LevelErrorValue || msg.Level == zerolog.LevelFatalValue {
+		if err := w.captureError(msg); err != nil {
+			return fmt.Errorf("w.captureError: %w", err)
+		}
+		return nil
+	}
 	event := sentry.NewEvent()
 
 	event.Message = msg.Message
@@ -100,7 +122,7 @@ func (w *SentryWriter) captureEvent(msg *LoggerMessage) error {
 	return nil
 }
 
-func (w *SentryWriter) captureError(msg *LoggerMessage) error {
+func (w *SentryWriter) captureError(msg *types.LoggerMessage) error {
 	event := sentry.NewEvent()
 
 	event.Message = msg.Message

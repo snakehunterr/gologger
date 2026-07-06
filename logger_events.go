@@ -1,11 +1,15 @@
 package gologger
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog"
+	"github.com/snakehunterr/gologger/types"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type LoggerEvents []*zerolog.Event
@@ -35,7 +39,7 @@ func (le LoggerEvents) Str(key, val string) LoggerEvents {
 }
 
 func (le LoggerEvents) Strf(key, format string, args ...any) LoggerEvents {
-	return le.Str(key, fmt.Sprintf(format, args))
+	return le.Str(key, fmt.Sprintf(format, args...))
 }
 
 func (le LoggerEvents) Err(err error) LoggerEvents {
@@ -72,4 +76,66 @@ func (le LoggerEvents) Err(err error) LoggerEvents {
 
 func (le LoggerEvents) Errf(format string, args ...any) LoggerEvents {
 	return le.Err(fmt.Errorf(format, args...))
+}
+
+func (le LoggerEvents) Ctx(ctx context.Context) LoggerEvents {
+	le = le.userCtx(ctx)
+	return le.traceCtx(ctx)
+}
+
+func (le LoggerEvents) userCtx(ctx context.Context) LoggerEvents {
+	if ctx == nil {
+		return le
+	}
+
+	if uc, ok := UserContextFromContext(ctx); ok {
+		for i, event := range le {
+			if event == nil {
+				continue
+			}
+			le[i] = event.Interface("user_context", uc)
+		}
+	}
+
+	return le
+}
+
+func (le LoggerEvents) traceCtx(ctx context.Context) LoggerEvents {
+	if ctx == nil {
+		return le
+	}
+
+	tc, ok := TraceContextFromContext(ctx)
+	if !ok {
+		span := trace.SpanContextFromContext(ctx)
+		if span.IsValid() {
+			tc = types.TraceContext{
+				TraceID: span.TraceID().String(),
+				SpanID:  span.SpanID().String(),
+			}
+			ok = true
+		}
+	}
+	if ok {
+		for i, event := range le {
+			if event == nil {
+				continue
+			}
+			le[i] = event.Interface("trace_context", tc)
+		}
+	}
+
+	return le
+}
+
+func (le LoggerEvents) FiberCtx(ctx *fiber.Ctx) LoggerEvents {
+	for i, event := range le {
+		if event == nil {
+			continue
+		}
+
+		le[i] = event.Interface("fiber_context", types.NewFiberCtx(ctx))
+	}
+
+	return le
 }
