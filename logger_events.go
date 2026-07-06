@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"runtime"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog"
@@ -135,6 +136,55 @@ func (le LoggerEvents) FiberCtx(ctx *fiber.Ctx) LoggerEvents {
 		}
 
 		le[i] = event.Interface("fiber_context", types.NewFiberCtx(ctx))
+	}
+
+	return le
+}
+
+// captureStackFrames capture stack traces from skip to maxFrames
+func captureStackFrames(skip, maxFrames int) []types.StackFrame {
+	pcs := make([]uintptr, maxFrames)
+	n := runtime.Callers(skip, pcs)
+	if n == 0 {
+		return nil
+	}
+
+	framesIter := runtime.CallersFrames(pcs[:n])
+
+	var collected []types.StackFrame
+	for {
+		frame, more := framesIter.Next()
+		collected = append(collected, types.StackFrame{
+			Function: frame.Function,
+			Filename: frame.File,
+			Lineno:   frame.Line,
+		})
+		if !more {
+			break
+		}
+	}
+
+	for i, j := 0, len(collected)-1; i < j; i, j = i+1, j-1 {
+		collected[i], collected[j] = collected[j], collected[i]
+	}
+
+	return collected
+}
+
+// Stack capture callers stack trace
+func (le LoggerEvents) Stack() LoggerEvents {
+	frames := captureStackFrames(3, 32)
+	if len(frames) == 0 {
+		return le
+	}
+
+	st := types.Stacktrace{Frames: frames}
+
+	for i, event := range le {
+		if event == nil {
+			continue
+		}
+		le[i] = event.Interface("stack_trace", st)
 	}
 
 	return le

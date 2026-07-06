@@ -12,12 +12,14 @@ type LoggerMessage struct {
 	Message      string        `json:"message"`
 	Service      string        `json:"service"`
 	Module       string        `json:"module"`
+	CallerName   string        `json:"caller_name"`
 	Level        string        `json:"level"`
 	Error        string        `json:"error"`
 	ErrorType    string        `json:"error_type"`
+	StatusCode   *int          `json:"status_code"`
 	UserContext  *UserContext  `json:"user_context"`
 	TraceContext *TraceContext `json:"trace_context"`
-	StatusCode   *int          `json:"status_code"`
+	Stacktrace   *Stacktrace   `json:"stack_trace"`
 	FiberCtx     *FiberContext `json:"fiber_context"`
 }
 
@@ -47,6 +49,8 @@ func (m *LoggerMessage) ToOTELAttributes() []otellog.KeyValue {
 	attrs := []otellog.KeyValue{
 		otellog.String("service_name", m.Service),
 		otellog.String("module_name", m.Module),
+		otellog.String("error", m.Error),
+		otellog.String("error_type", m.ErrorType),
 	}
 
 	if m.StatusCode != nil {

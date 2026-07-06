@@ -113,8 +113,8 @@ func (w *SentryWriter) captureEvent(msg *types.LoggerMessage) error {
 		}
 		return nil
 	}
-	event := sentry.NewEvent()
 
+	event := sentry.NewEvent()
 	event.Message = msg.Message
 
 	sentry.CaptureEvent(event)
@@ -124,16 +124,19 @@ func (w *SentryWriter) captureEvent(msg *types.LoggerMessage) error {
 
 func (w *SentryWriter) captureError(msg *types.LoggerMessage) error {
 	event := sentry.NewEvent()
-
 	event.Message = msg.Message
 
-	event.Exception = []sentry.Exception{
-		{
-			Type:   msg.ErrorType,
-			Value:  msg.Message,
-			Module: msg.Module,
-		},
+	exc := sentry.Exception{
+		Type:   msg.ErrorType,
+		Value:  msg.Error,
+		Module: msg.Module,
 	}
+
+	if strace, ok := msg.Stacktrace.ToSentryStacktrace(); ok {
+		exc.Stacktrace = strace
+	}
+
+	event.Exception = []sentry.Exception{exc}
 
 	sentry.CaptureEvent(event)
 

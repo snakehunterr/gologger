@@ -3,6 +3,7 @@ package gologger
 import (
 	"fmt"
 	"io"
+	"runtime"
 
 	"github.com/snakehunterr/gologger/loggers"
 	"go.opentelemetry.io/otel/metric"
@@ -174,6 +175,16 @@ func (ls *LoggerService) WithOpenObserveLogger(config *OpenObserveLoggerConfig) 
 	return nil
 }
 
+func callerFuncName() string {
+	pc, _, _, ok := runtime.Caller(3)
+
+	if !ok {
+		return "<unknown>"
+	}
+
+	return runtime.FuncForPC(pc).Name()
+}
+
 func (ls *LoggerService) callToLoggers(fn func(logger Logger) *zerolog.Event) LoggerEvents {
 	if ls == nil {
 		return nil
@@ -181,10 +192,13 @@ func (ls *LoggerService) callToLoggers(fn func(logger Logger) *zerolog.Event) Lo
 
 	events := make([]*zerolog.Event, len(ls.loggers))
 
+	fnName := callerFuncName()
+
 	for i, logger := range ls.loggers {
 		events[i] = fn(logger).
 			Str("service", ls.serviceName).
-			Str("module", ls.moduleName)
+			Str("module", ls.moduleName).
+			Str("caller_name", fnName)
 	}
 
 	return events
