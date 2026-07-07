@@ -106,6 +106,10 @@ func (l *FileLogger) now() time.Time {
 }
 
 func (l *FileLogger) callToZeroLogger(fn func() *zerolog.Event) *zerolog.Event {
+	if l.closed {
+		return nil
+	}
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
 

@@ -257,17 +257,17 @@ func (ls *LoggerService) Close() error {
 		return nil
 	}
 
-	for _, logger := range ls.childs {
-		if err := logger.Close(); err != nil {
-			return fmt.Errorf("logger.Close: %w", err)
-		}
-	}
-
 	for _, logger := range ls.loggers {
 		if closer, ok := logger.(io.Closer); ok {
 			if err := closer.Close(); err != nil {
 				return fmt.Errorf("%T.Close: %w", logger, err)
 			}
+		}
+	}
+
+	for _, logger := range ls.childs {
+		if err := logger.Close(); err != nil {
+			return fmt.Errorf("logger.Close: %w", err)
 		}
 	}
 
