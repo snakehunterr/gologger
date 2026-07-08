@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"sync"
 
 	"github.com/snakehunterr/gologger/loggers"
 	"go.opentelemetry.io/otel/metric"
@@ -18,14 +19,14 @@ import (
 
 type LoggerService struct {
 	ServiceName string
-
-	ModuleName string
+	ModuleName  string
 
 	consoleLogger     *loggers.ConsoleLogger
 	fileLogger        *loggers.FileLogger
 	sentryLogger      *loggers.SentryLogger
 	openObserveLogger *loggers.OpenObserveLogger
 
+	mu      *sync.Mutex
 	loggers []Logger
 	childs  []*LoggerService
 }
@@ -33,13 +34,8 @@ type LoggerService struct {
 func NewLoggerService(name string) *LoggerService {
 	ls := &LoggerService{
 		ServiceName: name,
-	}
-
-	ls.loggers = []Logger{
-		ls.consoleLogger,
-		ls.fileLogger,
-		ls.sentryLogger,
-		ls.openObserveLogger,
+		loggers:     make([]Logger, 0, 4),
+		mu:          &sync.Mutex{},
 	}
 
 	return ls
@@ -50,11 +46,18 @@ func (ls *LoggerService) NewChild(name string) (*LoggerService, error) {
 		return nil, errors.New("*LoggerService is nil")
 	}
 
-	newls := &LoggerService{
-		ServiceName:   name,
-		consoleLogger: ls.consoleLogger,
-		fileLogger:    ls.fileLogger,
-		sentryLogger:  ls.sentryLogger,
+	newls := NewLoggerService(name)
+
+	if ls.consoleLogger != nil {
+		newls.consoleLogger = ls.consoleLogger
+	}
+
+	if ls.fileLogger != nil {
+		newls.fileLogger = ls.fileLogger
+	}
+
+	if ls.sentryLogger != nil {
+		newls.sentryLogger = ls.sentryLogger
 	}
 
 	if ls.openObserveLogger != nil {
@@ -63,12 +66,7 @@ func (ls *LoggerService) NewChild(name string) (*LoggerService, error) {
 		}
 	}
 
-	newls.loggers = []Logger{
-		newls.consoleLogger,
-		newls.fileLogger,
-		newls.sentryLogger,
-		newls.openObserveLogger,
-	}
+	newls.reallocLoggers()
 
 	ls.childs = append(ls.childs, newls)
 
@@ -79,6 +77,9 @@ func (ls *LoggerService) WithModuleName(name string) *LoggerService {
 	if ls == nil {
 		return ls
 	}
+
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
 
 	ls.ModuleName = name
 	return ls
@@ -118,6 +119,9 @@ func (ls *LoggerService) WithConsoleLogger(config *ConsoleLoggerConfig) error {
 		return loggers.LoggerError("*LoggerService is nil")
 	}
 
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+
 	if ls.consoleLogger != nil {
 		if err := ls.consoleLogger.Close(); err != nil {
 			return fmt.Errorf("ls.consoleLogger.Close: %w", err)
@@ -129,6 +133,8 @@ func (ls *LoggerService) WithConsoleLogger(config *ConsoleLoggerConfig) error {
 		return fmt.Errorf("loggers.NewConsoleLogger: %w", err)
 	}
 
+	ls.reallocLoggers()
+
 	return nil
 }
 
@@ -136,6 +142,9 @@ func (ls *LoggerService) WithFileLogger(config *FileLoggerConfig) error {
 	if ls == nil {
 		return loggers.LoggerError("*LoggerService is nil")
 	}
+
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
 
 	if ls.fileLogger != nil {
 		if err := ls.fileLogger.Close(); err != nil {
@@ -148,6 +157,8 @@ func (ls *LoggerService) WithFileLogger(config *FileLoggerConfig) error {
 		return fmt.Errorf("loggers.NewFileLogger: %w", err)
 	}
 
+	ls.reallocLoggers()
+
 	return nil
 }
 
@@ -155,6 +166,9 @@ func (ls *LoggerService) WithSentryLogger(config *SentryLoggerConfig) error {
 	if ls == nil {
 		return loggers.LoggerError("*LoggerService is nil")
 	}
+
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
 
 	if ls.sentryLogger != nil {
 		if err := ls.sentryLogger.Close(); err != nil {
@@ -167,6 +181,8 @@ func (ls *LoggerService) WithSentryLogger(config *SentryLoggerConfig) error {
 		return fmt.Errorf("loggers.NewSentryLogger: %w", err)
 	}
 
+	ls.reallocLoggers()
+
 	return nil
 }
 
@@ -174,6 +190,9 @@ func (ls *LoggerService) WithOpenObserveLogger(config *OpenObserveLoggerConfig) 
 	if ls == nil {
 		return loggers.LoggerError("*LoggerService is nil")
 	}
+
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
 
 	if ls.openObserveLogger != nil {
 		if err := ls.openObserveLogger.Close(); err != nil {
@@ -185,6 +204,8 @@ func (ls *LoggerService) WithOpenObserveLogger(config *OpenObserveLoggerConfig) 
 	if ls.openObserveLogger, err = loggers.NewOpenObserveLogger(ls.ServiceName, config); err != nil {
 		return fmt.Errorf("loggers.NewOpenObserveLogger: %w", err)
 	}
+
+	ls.reallocLoggers()
 
 	return nil
 }
@@ -203,6 +224,9 @@ func (ls *LoggerService) callToLoggers(fn func(logger Logger) *zerolog.Event) Lo
 	if ls == nil {
 		return nil
 	}
+
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
 
 	events := make([]*zerolog.Event, len(ls.loggers))
 
@@ -274,6 +298,24 @@ func (ls *LoggerService) GetMinZapLevel() zapcore.Level {
 	}
 }
 
+// reallocLoggers realloc ls.loggers slice
+func (ls *LoggerService) reallocLoggers() {
+	ls.loggers = make([]Logger, 0, 4)
+
+	if ls.consoleLogger != nil {
+		ls.loggers = append(ls.loggers, ls.consoleLogger)
+	}
+	if ls.fileLogger != nil {
+		ls.loggers = append(ls.loggers, ls.fileLogger)
+	}
+	if ls.sentryLogger != nil {
+		ls.loggers = append(ls.loggers, ls.sentryLogger)
+	}
+	if ls.openObserveLogger != nil {
+		ls.loggers = append(ls.loggers, ls.openObserveLogger)
+	}
+}
+
 func (ls *LoggerService) Close() error {
 	if ls == nil {
 		return nil
@@ -292,6 +334,10 @@ func (ls *LoggerService) Close() error {
 	}
 
 	for _, logger := range ls.childs {
+		if logger == nil {
+			continue
+		}
+
 		if err := logger.Close(); err != nil {
 			return fmt.Errorf("logger.Close: %w", err)
 		}
