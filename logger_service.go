@@ -78,11 +78,30 @@ func (ls *LoggerService) WithModuleName(name string) *LoggerService {
 		return ls
 	}
 
-	ls.mu.Lock()
-	defer ls.mu.Unlock()
+	newls := NewLoggerService(ls.ServiceName)
+	newls.ModuleName = name
 
-	ls.ModuleName = name
-	return ls
+	if ls.consoleLogger != nil {
+		newls.consoleLogger = ls.consoleLogger
+	}
+
+	if ls.fileLogger != nil {
+		newls.fileLogger = ls.fileLogger
+	}
+
+	if ls.sentryLogger != nil {
+		newls.sentryLogger = ls.sentryLogger
+	}
+
+	if ls.openObserveLogger != nil {
+		newls.openObserveLogger = ls.openObserveLogger
+	}
+
+	newls.reallocLoggers()
+
+	ls.childs = append(ls.childs, newls)
+
+	return newls
 }
 
 // Tracer returns the OTel tracer backing the OpenObserve logger, for
