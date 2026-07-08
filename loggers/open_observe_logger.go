@@ -275,3 +275,11 @@ func (l *OpenObserveLogger) Close() error {
 	l.closed = true
 	return nil
 }
+
+func (l *OpenObserveLogger) GetConfig() *OpenObserveLoggerConfig {
+	if l == nil {
+		return nil
+	}
+
+	return l.config
+}

@@ -1,6 +1,7 @@
 package gologger
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"runtime"
@@ -16,22 +17,62 @@ import (
 )
 
 type LoggerService struct {
-	serviceName       string
-	moduleName        string
+	ServiceName string
+
+	ModuleName string
+
 	consoleLogger     *loggers.ConsoleLogger
 	fileLogger        *loggers.FileLogger
 	sentryLogger      *loggers.SentryLogger
 	openObserveLogger *loggers.OpenObserveLogger
-	loggers           []Logger
-	childs            []*LoggerService
+
+	loggers []Logger
+	childs  []*LoggerService
 }
 
-func NewLoggerService(serviceName, moduleName string) *LoggerService {
-	return &LoggerService{
-		serviceName: serviceName,
-		moduleName:  moduleName,
-		loggers:     make([]Logger, 0, 4),
+func NewLoggerService(name string) *LoggerService {
+	ls := &LoggerService{
+		ServiceName: name,
 	}
+
+	ls.loggers = []Logger{
+		ls.consoleLogger,
+		ls.fileLogger,
+		ls.sentryLogger,
+		ls.openObserveLogger,
+	}
+
+	return ls
+}
+
+func (ls *LoggerService) NewChild(name string) (*LoggerService, error) {
+	if ls == nil {
+		return nil, errors.New("*LoggerService is nil")
+	}
+
+	newls := &LoggerService{
+		ServiceName:   name,
+		consoleLogger: ls.consoleLogger,
+		fileLogger:    ls.fileLogger,
+		sentryLogger:  ls.sentryLogger,
+	}
+
+	if ls.openObserveLogger != nil {
+		if err := newls.WithOpenObserveLogger(ls.openObserveLogger.GetConfig()); err != nil {
+			return nil, fmt.Errorf("newls.WithOpenObserveLogger: %w", err)
+		}
+	}
+
+	newls.loggers = []Logger{
+		newls.consoleLogger,
+		newls.fileLogger,
+		newls.sentryLogger,
+		newls.openObserveLogger,
+	}
+
+	ls.childs = append(ls.childs, newls)
+
+	return newls, nil
 }
 
 func (ls *LoggerService) WithModuleName(name string) *LoggerService {
@@ -39,35 +80,8 @@ func (ls *LoggerService) WithModuleName(name string) *LoggerService {
 		return ls
 	}
 
-	newls := &LoggerService{
-		serviceName: ls.serviceName,
-		moduleName:  name,
-		loggers:     make([]Logger, 0, 4),
-	}
-
-	ls.childs = append(ls.childs, newls)
-
-	if ls.consoleLogger != nil {
-		newls.consoleLogger = ls.consoleLogger
-		newls.loggers = append(newls.loggers, ls.consoleLogger)
-	}
-
-	if ls.fileLogger != nil {
-		newls.fileLogger = ls.fileLogger
-		newls.loggers = append(newls.loggers, ls.fileLogger)
-	}
-
-	if ls.sentryLogger != nil {
-		newls.sentryLogger = ls.sentryLogger
-		newls.loggers = append(newls.loggers, ls.sentryLogger)
-	}
-
-	if ls.openObserveLogger != nil {
-		newls.openObserveLogger = ls.openObserveLogger
-		newls.loggers = append(newls.loggers, ls.openObserveLogger)
-	}
-
-	return newls
+	ls.ModuleName = name
+	return ls
 }
 
 // Tracer returns the OTel tracer backing the OpenObserve logger, for
@@ -105,15 +119,15 @@ func (ls *LoggerService) WithConsoleLogger(config *ConsoleLoggerConfig) error {
 	}
 
 	if ls.consoleLogger != nil {
-		return nil
+		if err := ls.consoleLogger.Close(); err != nil {
+			return fmt.Errorf("ls.consoleLogger.Close: %w", err)
+		}
 	}
 
 	var err error
 	if ls.consoleLogger, err = loggers.NewConsoleLogger(config); err != nil {
 		return fmt.Errorf("loggers.NewConsoleLogger: %w", err)
 	}
-
-	ls.loggers = append(ls.loggers, ls.consoleLogger)
 
 	return nil
 }
@@ -124,15 +138,15 @@ func (ls *LoggerService) WithFileLogger(config *FileLoggerConfig) error {
 	}
 
 	if ls.fileLogger != nil {
-		return nil
+		if err := ls.fileLogger.Close(); err != nil {
+			return fmt.Errorf("ls.fileLogger.Close: %w", err)
+		}
 	}
 
 	var err error
 	if ls.fileLogger, err = loggers.NewFileLogger(config); err != nil {
 		return fmt.Errorf("loggers.NewFileLogger: %w", err)
 	}
-
-	ls.loggers = append(ls.loggers, ls.fileLogger)
 
 	return nil
 }
@@ -143,15 +157,15 @@ func (ls *LoggerService) WithSentryLogger(config *SentryLoggerConfig) error {
 	}
 
 	if ls.sentryLogger != nil {
-		return nil
+		if err := ls.sentryLogger.Close(); err != nil {
+			return fmt.Errorf("ls.sentryLogger.Close: %w", err)
+		}
 	}
 
 	var err error
 	if ls.sentryLogger, err = loggers.NewSentryLogger(config); err != nil {
 		return fmt.Errorf("loggers.NewSentryLogger: %w", err)
 	}
-
-	ls.loggers = append(ls.loggers, ls.sentryLogger)
 
 	return nil
 }
@@ -162,15 +176,15 @@ func (ls *LoggerService) WithOpenObserveLogger(config *OpenObserveLoggerConfig) 
 	}
 
 	if ls.openObserveLogger != nil {
-		return nil
+		if err := ls.openObserveLogger.Close(); err != nil {
+			return fmt.Errorf("ls.openObserveLogger.Close: %w", err)
+		}
 	}
 
 	var err error
-	if ls.openObserveLogger, err = loggers.NewOpenObserveLogger(ls.serviceName, config); err != nil {
+	if ls.openObserveLogger, err = loggers.NewOpenObserveLogger(ls.ServiceName, config); err != nil {
 		return fmt.Errorf("loggers.NewOpenObserveLogger: %w", err)
 	}
-
-	ls.loggers = append(ls.loggers, ls.openObserveLogger)
 
 	return nil
 }
@@ -195,9 +209,13 @@ func (ls *LoggerService) callToLoggers(fn func(logger Logger) *zerolog.Event) Lo
 	fnName := callerFuncName()
 
 	for i, logger := range ls.loggers {
+		if logger == nil {
+			continue
+		}
+
 		events[i] = fn(logger).
-			Str("service", ls.serviceName).
-			Str("module", ls.moduleName).
+			Str("service", ls.ServiceName).
+			Str("module", ls.ModuleName).
 			Str("caller_name", fnName)
 	}
 
@@ -228,6 +246,10 @@ func (ls *LoggerService) GetMinZerologLevel() zerolog.Level {
 	level := zerolog.Disabled
 
 	for _, logger := range ls.loggers {
+		if logger == nil {
+			continue
+		}
+
 		lvl := logger.GetLevel()
 		if level > lvl {
 			level = lvl
@@ -258,6 +280,10 @@ func (ls *LoggerService) Close() error {
 	}
 
 	for _, logger := range ls.loggers {
+		if logger == nil {
+			continue
+		}
+
 		if closer, ok := logger.(io.Closer); ok {
 			if err := closer.Close(); err != nil {
 				return fmt.Errorf("%T.Close: %w", logger, err)
