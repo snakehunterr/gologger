@@ -189,3 +189,15 @@ func (le LoggerEvents) Stack() LoggerEvents {
 
 	return le
 }
+
+func (le LoggerEvents) StatusCode(code int) LoggerEvents {
+	for i, event := range le {
+		if event == nil {
+			continue
+		}
+
+		le[i] = event.Int("status_code", code)
+	}
+
+	return le
+}
