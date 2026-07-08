@@ -123,7 +123,8 @@ func NewOpenObserveLogger(serviceName string, config *OpenObserveLoggerConfig) (
 
 	ctx := context.Background()
 
-	res, err := resource.New(ctx,
+	res, err := resource.New(
+		ctx,
 		resource.WithAttributes(
 			semconv.ServiceName(serviceName),
 		),
@@ -155,7 +156,8 @@ func NewOpenObserveLogger(serviceName string, config *OpenObserveLoggerConfig) (
 
 func (l *OpenObserveLogger) setupLogs(ctx context.Context) error {
 	// OTLP HTTP log exporter → OTel Collector
-	exporter, err := otlploghttp.New(ctx,
+	exporter, err := otlploghttp.New(
+		ctx,
 		otlploghttp.WithEndpoint(l.config.CollectorEndpoint),
 		otlploghttp.WithURLPath("/v1/logs"),
 		otlploghttp.WithInsecure(),
@@ -182,7 +184,8 @@ func (l *OpenObserveLogger) setupLogs(ctx context.Context) error {
 
 func (l *OpenObserveLogger) setupTraces(ctx context.Context) error {
 	// OTLP HTTP trace exporter → OTel Collector
-	exporter, err := otlptracehttp.New(ctx,
+	exporter, err := otlptracehttp.New(
+		ctx,
 		otlptracehttp.WithEndpoint(l.config.CollectorEndpoint),
 		otlptracehttp.WithURLPath("/v1/traces"),
 		otlptracehttp.WithInsecure(),
@@ -203,7 +206,8 @@ func (l *OpenObserveLogger) setupTraces(ctx context.Context) error {
 
 func (l *OpenObserveLogger) setupMetrics(ctx context.Context) error {
 	// OTLP HTTP metric exporter → OTel Collector
-	exporter, err := otlpmetrichttp.New(ctx,
+	exporter, err := otlpmetrichttp.New(
+		ctx,
 		otlpmetrichttp.WithEndpoint(l.config.CollectorEndpoint),
 		otlpmetrichttp.WithURLPath("/v1/metrics"),
 		otlpmetrichttp.WithInsecure(),

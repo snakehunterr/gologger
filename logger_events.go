@@ -29,11 +29,11 @@ func (le LoggerEvents) Msgf(format string, args ...any) {
 }
 
 func (le LoggerEvents) Str(key, val string) LoggerEvents {
-	for _, event := range le {
+	for i, event := range le {
 		if event == nil {
 			continue
 		}
-		*event = *event.Str(key, val)
+		le[i] = event.Str(key, val)
 	}
 
 	return le
@@ -65,11 +65,11 @@ func (le LoggerEvents) Err(err error) LoggerEvents {
 		errorType = rftype.Name()
 	}
 
-	for _, event := range le {
+	for i, event := range le {
 		if event == nil {
 			continue
 		}
-		*event = *event.Err(err).Str("error_type", errorType)
+		le[i] = event.Err(err).Str("error_type", errorType)
 	}
 
 	return le
