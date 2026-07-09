@@ -23,6 +23,15 @@ func Test_LoggerServiceNoNilPanic(t *testing.T) {
 				Stack().
 				StatusCode(200).
 				Msg("some")
+
+			logger.
+				Error().
+				Err(nil).
+				FiberCtx(&c).
+				Ctx(ctx).
+				Stack().
+				StatusCode(200).
+				Msg("some")
 		}
 
 		do(logger)

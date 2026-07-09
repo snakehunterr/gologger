@@ -54,8 +54,8 @@ func (le LoggerEvents) Strf(key, format string, args ...any) LoggerEvents {
 }
 
 func (le LoggerEvents) Err(err error) LoggerEvents {
-	if le == nil {
-		return nil
+	if le == nil || err == nil {
+		return le
 	}
 	inner := err
 
@@ -89,6 +89,9 @@ func (le LoggerEvents) Err(err error) LoggerEvents {
 }
 
 func (le LoggerEvents) Errf(format string, args ...any) LoggerEvents {
+	if le == nil {
+		return nil
+	}
 	return le.Err(fmt.Errorf(format, args...))
 }
 

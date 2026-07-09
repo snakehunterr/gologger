@@ -103,6 +103,14 @@ func (ls *LoggerService) WithModuleName(name string) *LoggerService {
 	return newls
 }
 
+func (ls *LoggerService) GetModuleName() string {
+	if ls == nil {
+		return ""
+	}
+
+	return ls.ModuleName
+}
+
 // Tracer returns the OTel tracer backing the OpenObserve logger, for
 // starting spans:
 //
