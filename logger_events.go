@@ -16,6 +16,10 @@ import (
 type LoggerEvents []*zerolog.Event
 
 func (le LoggerEvents) Msg(msg string) {
+	if le == nil {
+		return
+	}
+
 	for _, event := range le {
 		if event == nil {
 			continue
@@ -25,10 +29,16 @@ func (le LoggerEvents) Msg(msg string) {
 }
 
 func (le LoggerEvents) Msgf(format string, args ...any) {
+	if le == nil {
+		return
+	}
 	le.Msg(fmt.Sprintf(format, args...))
 }
 
 func (le LoggerEvents) Str(key, val string) LoggerEvents {
+	if le == nil {
+		return nil
+	}
 	for i, event := range le {
 		if event == nil {
 			continue
@@ -44,6 +54,9 @@ func (le LoggerEvents) Strf(key, format string, args ...any) LoggerEvents {
 }
 
 func (le LoggerEvents) Err(err error) LoggerEvents {
+	if le == nil {
+		return nil
+	}
 	inner := err
 
 	for {
@@ -80,6 +93,9 @@ func (le LoggerEvents) Errf(format string, args ...any) LoggerEvents {
 }
 
 func (le LoggerEvents) Ctx(ctx context.Context) LoggerEvents {
+	if le == nil {
+		return nil
+	}
 	le = le.userCtx(ctx)
 	return le.traceCtx(ctx)
 }
@@ -130,6 +146,9 @@ func (le LoggerEvents) traceCtx(ctx context.Context) LoggerEvents {
 }
 
 func (le LoggerEvents) FiberCtx(ctx *fiber.Ctx) LoggerEvents {
+	if le == nil {
+		return nil
+	}
 	for i, event := range le {
 		if event == nil {
 			continue
@@ -173,6 +192,9 @@ func captureStackFrames(skip, maxFrames int) []types.StackFrame {
 
 // Stack capture callers stack trace
 func (le LoggerEvents) Stack() LoggerEvents {
+	if le == nil {
+		return nil
+	}
 	frames := captureStackFrames(3, 32)
 	if len(frames) == 0 {
 		return le
@@ -191,6 +213,9 @@ func (le LoggerEvents) Stack() LoggerEvents {
 }
 
 func (le LoggerEvents) StatusCode(code int) LoggerEvents {
+	if le == nil {
+		return nil
+	}
 	for i, event := range le {
 		if event == nil {
 			continue
