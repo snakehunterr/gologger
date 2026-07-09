@@ -1,7 +1,6 @@
 package gologger
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"runtime"
@@ -43,7 +42,7 @@ func NewLoggerService(name string) *LoggerService {
 
 func (ls *LoggerService) NewChild(name string) (*LoggerService, error) {
 	if ls == nil {
-		return nil, errors.New("*LoggerService is nil")
+		return nil, nil
 	}
 
 	newls := NewLoggerService(name)
