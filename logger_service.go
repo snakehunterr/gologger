@@ -74,7 +74,7 @@ func (ls *LoggerService) NewChild(name string) (*LoggerService, error) {
 
 func (ls *LoggerService) WithModuleName(name string) *LoggerService {
 	if ls == nil {
-		return ls
+		return nil
 	}
 
 	newls := NewLoggerService(ls.ServiceName)
@@ -239,10 +239,6 @@ func callerFuncName() string {
 }
 
 func (ls *LoggerService) callToLoggers(fn func(logger Logger) *zerolog.Event) LoggerEvents {
-	if ls == nil {
-		return nil
-	}
-
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
 
@@ -265,26 +261,45 @@ func (ls *LoggerService) callToLoggers(fn func(logger Logger) *zerolog.Event) Lo
 }
 
 func (ls *LoggerService) Trace() LoggerEvents {
+	if ls == nil {
+		return nil
+	}
 	return ls.callToLoggers(func(logger Logger) *zerolog.Event { return logger.Trace() })
 }
 
 func (ls *LoggerService) Debug() LoggerEvents {
+	if ls == nil {
+		return nil
+	}
 	return ls.callToLoggers(func(logger Logger) *zerolog.Event { return logger.Debug() })
 }
 
 func (ls *LoggerService) Info() LoggerEvents {
+	if ls == nil {
+		return nil
+	}
 	return ls.callToLoggers(func(logger Logger) *zerolog.Event { return logger.Info() })
 }
 
 func (ls *LoggerService) Warn() LoggerEvents {
+	if ls == nil {
+		return nil
+	}
 	return ls.callToLoggers(func(logger Logger) *zerolog.Event { return logger.Warn() })
 }
 
 func (ls *LoggerService) Error() LoggerEvents {
+	if ls == nil {
+		return nil
+	}
 	return ls.callToLoggers(func(logger Logger) *zerolog.Event { return logger.Error() })
 }
 
 func (ls *LoggerService) GetMinZerologLevel() zerolog.Level {
+	if ls == nil {
+		return zerolog.Disabled
+	}
+
 	level := zerolog.Disabled
 
 	for _, logger := range ls.loggers {
@@ -318,6 +333,10 @@ func (ls *LoggerService) GetMinZapLevel() zapcore.Level {
 
 // reallocLoggers realloc ls.loggers slice
 func (ls *LoggerService) reallocLoggers() {
+	if ls == nil {
+		return
+	}
+
 	ls.loggers = make([]Logger, 0, 4)
 
 	if ls.consoleLogger != nil {
