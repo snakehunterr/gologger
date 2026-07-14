@@ -1,6 +1,7 @@
 package types
 
 import (
+	"path"
 	"strings"
 
 	"github.com/getsentry/sentry-go"
@@ -30,10 +31,20 @@ func (s *Stacktrace) ToSentryStacktrace() (*sentry.Stacktrace, bool) {
 			Module:   f.Module,
 			Filename: f.Filename,
 			Lineno:   f.Lineno,
-			// FIXME: same output is if InApp: true
-			InApp: !strings.Contains(f.Filename, "/pkg/mod/") && !strings.HasPrefix(f.Function, "runtime."),
+			InApp:    inApp(f.Filename),
 		}
 	}
 
 	return &sentry.Stacktrace{Frames: frames}, true
+}
+
+func inApp(s string) bool {
+	if strings.Contains(s, "github.com") {
+		return false
+	}
+	if path.Base(path.Dir(s)) == "runtime" {
+		return false
+	}
+
+	return true
 }
