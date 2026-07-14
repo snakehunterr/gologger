@@ -1,8 +1,10 @@
 package loggers
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -11,11 +13,12 @@ import (
 )
 
 type SentryLoggerConfig struct {
-	DSN         string `json:"dsn"`
-	Level       string `json:"level"`
-	level       zerolog.Level
-	AppVersion  string `json:"app_version"`
-	Environment string `json:"environment"`
+	DSN                    string `json:"dsn"`
+	Level                  string `json:"level"`
+	level                  zerolog.Level
+	AppVersion             string `json:"app_version"`
+	Environment            string `json:"environment"`
+	HTTPInsecureSkipVerify bool   `json:"http_insecure_skip_verify"`
 }
 
 func (c *SentryLoggerConfig) Validate() error {
@@ -116,6 +119,7 @@ func (w *SentryWriter) captureEvent(msg *types.LoggerMessage) error {
 
 	event := sentry.NewEvent()
 	event.Message = msg.Message
+	event.Level = w.levelMap[msg.Level]
 
 	sentry.CaptureEvent(event)
 
@@ -125,6 +129,7 @@ func (w *SentryWriter) captureEvent(msg *types.LoggerMessage) error {
 func (w *SentryWriter) captureError(msg *types.LoggerMessage) error {
 	event := sentry.NewEvent()
 	event.Message = msg.Message
+	event.Level = w.levelMap[msg.Level]
 
 	exc := sentry.Exception{
 		Type:   msg.ErrorType,
@@ -155,9 +160,23 @@ func NewSentryLogger(config *SentryLoggerConfig) (*SentryLogger, error) {
 		return nil, fmt.Errorf("config.Validate: %w", err)
 	}
 
+	httpClient := http.Client{
+		Timeout: time.Second * 15,
+	}
+
+	if config.HTTPInsecureSkipVerify {
+		httpClient.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		}
+	}
+
 	if err := sentry.Init(sentry.ClientOptions{
 		Dsn:         config.DSN,
 		Environment: config.Environment,
+		Release:     config.AppVersion,
+		HTTPClient:  &httpClient,
 	}); err != nil {
 		return nil, fmt.Errorf("sentry.Init: %w", err)
 	}
